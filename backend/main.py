@@ -1,42 +1,29 @@
 from models.elevator import Elevator
 from models.passenger import Passenger
 from models.request import Request
+from utils.helper import next_passenger_id, next_request_id, floor_distance
 
-elevator = Elevator(1)
+pid = next_passenger_id()
+rid = next_request_id()
 
 passenger = Passenger(
-    passenger_id=1,
+    passenger_id=pid,
     source_floor=2,
     destination_floor=8,
     arrival_time=0,
 )
 
 request = Request(
-    request_id=1,
+    request_id=rid,
     passenger=passenger,
 )
 
-print(elevator)
+elevator = Elevator(1)
 
-# Dispatcher assigns request
 elevator.assign_request(request)
 
+print(passenger)
+print(request)
 print(elevator)
 
-# Passenger boards
-elevator.board_passenger(request)
-
-print(elevator)
-
-# Elevator moves
-elevator.move_up()
-elevator.move_up()
-
-print(elevator)
-
-# Passenger reaches destination
-elevator.complete_request(request)
-
-elevator.stop()
-
-print(elevator)
+print("Distance:", floor_distance(2, 8))

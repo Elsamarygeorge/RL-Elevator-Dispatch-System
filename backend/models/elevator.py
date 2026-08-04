@@ -14,12 +14,17 @@ from utils.enums import Direction, ElevatorStatus
 
 
 class Elevator:
+    """
+    Represents a single elevator in the building.
+    """
 
     def __init__(
         self,
         elevator_id: int,
         current_floor: int = 1,
     ) -> None:
+
+        # ---------- Validation ----------
 
         if elevator_id <= 0:
             raise ValueError("Elevator ID must be greater than 0.")
@@ -29,42 +34,53 @@ class Elevator:
                 f"Current floor must be between 1 and {NUM_FLOORS}."
             )
 
-        self.elevator_id = elevator_id
-        self.current_floor = current_floor
+        # ---------- Elevator Information ----------
 
-        self.direction = Direction.IDLE
-        self.status = ElevatorStatus.STOPPED
+        self.elevator_id: int = elevator_id
+        self.current_floor: int = current_floor
 
-        self.capacity = ELEVATOR_CAPACITY
+        self.direction: Direction = Direction.IDLE
+        self.status: ElevatorStatus = ElevatorStatus.STOPPED
+
+        self.capacity: int = ELEVATOR_CAPACITY
 
         # Requests assigned but passenger not picked up yet
         self.assigned_requests: List[Request] = []
 
-        # Requests whose passengers are inside elevator
+        # Requests whose passengers are inside the elevator
         self.onboard_requests: List[Request] = []
 
     @property
     def current_load(self) -> int:
+        """
+        Returns the current number of passengers inside the elevator.
+        """
         return len(self.onboard_requests)
 
     @property
     def available_capacity(self) -> int:
+        """
+        Returns the remaining elevator capacity.
+        """
         return self.capacity - self.current_load
 
     def is_full(self) -> bool:
+        """
+        Checks whether the elevator is full.
+        """
         return self.current_load >= self.capacity
 
     def assign_request(self, request: Request) -> None:
         """
-        Dispatcher assigns a request to this elevator.
+        Assign a request to this elevator.
         """
 
         self.assigned_requests.append(request)
-        request.assign_elevator(self.elevator_id)
+        request.assign_elevator(self)
 
-    def board_passenger(self, request: Request) -> None:
+    def board_request(self, request: Request) -> None:
         """
-        Passenger enters the elevator.
+        Move an assigned request into the elevator.
         """
 
         if self.is_full():
@@ -72,20 +88,27 @@ class Elevator:
                 f"Elevator {self.elevator_id} is full."
             )
 
-        if request in self.assigned_requests:
-            self.assigned_requests.remove(request)
+        if request not in self.assigned_requests:
+            raise ValueError(
+                "Request is not assigned to this elevator."
+            )
 
+        self.assigned_requests.remove(request)
         self.onboard_requests.append(request)
 
-    def complete_request(self, request: Request) -> None:
+    def remove_request(self, request: Request) -> None:
         """
-        Passenger reaches destination.
+        Remove a request after passenger exits.
+
+        (Request completion is handled by the Building/Simulator.)
         """
 
-        if request in self.onboard_requests:
-            self.onboard_requests.remove(request)
+        if request not in self.onboard_requests:
+            raise ValueError(
+                "Request is not inside the elevator."
+            )
 
-        request.complete()
+        self.onboard_requests.remove(request)
 
     def move_up(self) -> None:
 
@@ -106,7 +129,7 @@ class Elevator:
         self.direction = Direction.IDLE
         self.status = ElevatorStatus.STOPPED
 
-    def __repr__(self):
+    def __repr__(self) -> str:
 
         return (
             f"Elevator("

@@ -6,10 +6,13 @@ Defines the Request class used in the elevator dispatch simulation.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from models.passenger import Passenger
 from utils.enums import RequestStatus
+
+if TYPE_CHECKING:
+    from models.elevator import Elevator
 
 
 class Request:
@@ -32,21 +35,16 @@ class Request:
         self.passenger: Passenger = passenger
 
         # Assigned during dispatching
-        self.assigned_elevator: Optional[int] = None
+        self.assigned_elevator: Optional["Elevator"] = None
 
         self.status: RequestStatus = RequestStatus.WAITING
 
-    def assign_elevator(self, elevator_id: int) -> None:
+    def assign_elevator(self, elevator: "Elevator") -> None:
         """
         Assigns the request to an elevator.
         """
 
-        if elevator_id <= 0:
-            raise ValueError(
-                "Elevator ID must be greater than 0."
-            )
-
-        self.assigned_elevator = elevator_id
+        self.assigned_elevator = elevator
         self.status = RequestStatus.ASSIGNED
 
     def complete(self) -> None:
@@ -58,10 +56,16 @@ class Request:
 
     def __repr__(self) -> str:
 
+        elevator_id = (
+            self.assigned_elevator.elevator_id
+            if self.assigned_elevator
+            else None
+        )
+
         return (
             f"Request("
             f"id={self.request_id}, "
             f"passenger={self.passenger.passenger_id}, "
             f"status={self.status.value}, "
-            f"assigned_elevator={self.assigned_elevator})"
+            f"assigned_elevator={elevator_id})"
         )
