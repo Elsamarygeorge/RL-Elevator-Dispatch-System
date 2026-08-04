@@ -14,17 +14,12 @@ from utils.enums import Direction, ElevatorStatus
 
 
 class Elevator:
-    """
-    Represents a single elevator in the building.
-    """
 
     def __init__(
         self,
         elevator_id: int,
         current_floor: int = 1,
     ) -> None:
-
-        # ---------- Validation ----------
 
         if elevator_id <= 0:
             raise ValueError("Elevator ID must be greater than 0.")
@@ -34,42 +29,42 @@ class Elevator:
                 f"Current floor must be between 1 and {NUM_FLOORS}."
             )
 
-        # ---------- Elevator Information ----------
+        self.elevator_id = elevator_id
+        self.current_floor = current_floor
 
-        self.elevator_id: int = elevator_id
-        self.current_floor: int = current_floor
+        self.direction = Direction.IDLE
+        self.status = ElevatorStatus.STOPPED
 
-        self.direction: Direction = Direction.IDLE
-        self.status: ElevatorStatus = ElevatorStatus.STOPPED
+        self.capacity = ELEVATOR_CAPACITY
 
-        self.capacity: int = ELEVATOR_CAPACITY
+        # Requests assigned but passenger not picked up yet
+        self.assigned_requests: List[Request] = []
 
-        # Requests currently assigned to this elevator
-        self.requests: List[Request] = []
+        # Requests whose passengers are inside elevator
+        self.onboard_requests: List[Request] = []
 
     @property
     def current_load(self) -> int:
-        """
-        Returns the current number of assigned requests.
-        """
-        return len(self.requests)
+        return len(self.onboard_requests)
 
     @property
     def available_capacity(self) -> int:
-        """
-        Returns remaining capacity.
-        """
         return self.capacity - self.current_load
 
     def is_full(self) -> bool:
-        """
-        Checks whether the elevator is full.
-        """
         return self.current_load >= self.capacity
 
-    def add_request(self, request: Request) -> None:
+    def assign_request(self, request: Request) -> None:
         """
-        Assigns a request to the elevator.
+        Dispatcher assigns a request to this elevator.
+        """
+
+        self.assigned_requests.append(request)
+        request.assign_elevator(self.elevator_id)
+
+    def board_passenger(self, request: Request) -> None:
+        """
+        Passenger enters the elevator.
         """
 
         if self.is_full():
@@ -77,21 +72,22 @@ class Elevator:
                 f"Elevator {self.elevator_id} is full."
             )
 
-        self.requests.append(request)
-        request.assign_elevator(self.elevator_id)
+        if request in self.assigned_requests:
+            self.assigned_requests.remove(request)
 
-    def remove_request(self, request: Request) -> None:
+        self.onboard_requests.append(request)
+
+    def complete_request(self, request: Request) -> None:
         """
-        Removes a completed request.
+        Passenger reaches destination.
         """
 
-        if request in self.requests:
-            self.requests.remove(request)
+        if request in self.onboard_requests:
+            self.onboard_requests.remove(request)
+
+        request.complete()
 
     def move_up(self) -> None:
-        """
-        Moves the elevator up by one floor.
-        """
 
         if self.current_floor < NUM_FLOORS:
             self.current_floor += 1
@@ -99,9 +95,6 @@ class Elevator:
             self.status = ElevatorStatus.MOVING
 
     def move_down(self) -> None:
-        """
-        Moves the elevator down by one floor.
-        """
 
         if self.current_floor > 1:
             self.current_floor -= 1
@@ -109,18 +102,17 @@ class Elevator:
             self.status = ElevatorStatus.MOVING
 
     def stop(self) -> None:
-        """
-        Stops the elevator.
-        """
 
         self.direction = Direction.IDLE
         self.status = ElevatorStatus.STOPPED
 
-    def __repr__(self) -> str:
+    def __repr__(self):
+
         return (
             f"Elevator("
             f"id={self.elevator_id}, "
             f"floor={self.current_floor}, "
             f"direction={self.direction.value}, "
-            f"load={self.current_load}/{self.capacity})"
+            f"assigned={len(self.assigned_requests)}, "
+            f"onboard={self.current_load}/{self.capacity})"
         )
