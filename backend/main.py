@@ -1,21 +1,24 @@
 from models.passenger import Passenger
+from models.request import Request
 
-p = Passenger(
+passenger = Passenger(
     passenger_id=1,
     source_floor=2,
     destination_floor=8,
-    arrival_time=0
+    arrival_time=0,
 )
 
-print(p)
+request = Request(
+    request_id=1,
+    passenger=passenger,
+)
 
-print("Waiting:", p.waiting_time)
+print(request)
 
-p.boarding_time = 5
+request.assign_elevator(2)
 
-print("Waiting:", p.waiting_time)
+print(request)
 
-p.exit_time = 12
+request.complete()
 
-print("Travel:", p.travel_time)
-print("Total :", p.total_time)
+print(request)
