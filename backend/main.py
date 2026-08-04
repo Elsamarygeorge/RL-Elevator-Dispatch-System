@@ -1,24 +1,32 @@
+from models.elevator import Elevator
 from models.passenger import Passenger
 from models.request import Request
+
+elevator = Elevator(1)
 
 passenger = Passenger(
     passenger_id=1,
     source_floor=2,
     destination_floor=8,
-    arrival_time=0,
+    arrival_time=0
 )
 
 request = Request(
     request_id=1,
-    passenger=passenger,
+    passenger=passenger
 )
 
-print(request)
+print(elevator)
 
-request.assign_elevator(2)
+elevator.add_request(request)
 
-print(request)
+print(elevator)
 
-request.complete()
+elevator.move_up()
+elevator.move_up()
 
-print(request)
+print(elevator)
+
+elevator.stop()
+
+print(elevator)
