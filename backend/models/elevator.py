@@ -63,6 +63,21 @@ class Elevator:
         Returns the remaining elevator capacity.
         """
         return self.capacity - self.current_load
+    @property
+    def next_stop_floor(self) -> int | None:
+        """
+        Nearest floor this elevator still needs to visit —
+        either to pick someone up or drop someone off.
+        Returns None if the elevator has nothing to do.
+        """
+        stops = [r.passenger.source_floor for r in self.assigned_requests]
+        stops += [r.passenger.destination_floor for r in self.onboard_requests]
+
+        if not stops:
+            return None
+
+        return min(stops, key=lambda f: abs(f - self.current_floor))
+   
 
     def is_full(self) -> bool:
         """
