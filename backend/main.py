@@ -1,29 +1,19 @@
-from models.elevator import Elevator
-from models.passenger import Passenger
-from models.request import Request
-from utils.helper import next_passenger_id, next_request_id, floor_distance
+from environment.building import Building
+from environment.traffic_generator import TrafficGenerator
 
-pid = next_passenger_id()
-rid = next_request_id()
+building = Building()
 
-passenger = Passenger(
-    passenger_id=pid,
-    source_floor=2,
-    destination_floor=8,
-    arrival_time=0,
+generator = TrafficGenerator(seed=42)
+
+generator.generate_requests(
+    building=building,
+    period="morning",
+    num_requests=5,
 )
 
-request = Request(
-    request_id=rid,
-    passenger=passenger,
-)
+print(building)
 
-elevator = Elevator(1)
+print("\nWaiting Requests:\n")
 
-elevator.assign_request(request)
-
-print(passenger)
-print(request)
-print(elevator)
-
-print("Distance:", floor_distance(2, 8))
+for request in building.waiting_requests:
+    print(request)

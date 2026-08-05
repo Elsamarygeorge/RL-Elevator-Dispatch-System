@@ -1,35 +1,12 @@
-"""
-config.py
-
-Stores configuration values used throughout the simulation.
-"""
-
-# ----------------------------
-# Building Configuration
-# ----------------------------
-
 NUM_FLOORS = 10
 NUM_ELEVATORS = 3
-
-# ----------------------------
-# Elevator Configuration
-# ----------------------------
-
 ELEVATOR_CAPACITY = 8
-ELEVATOR_SPEED = 1      # Floors moved per simulation step
-
-# ----------------------------
-# Simulation Configuration
-# ----------------------------
 
 SIMULATION_STEPS = 1000
+MORNING_WINDOW = (0, 300)
+LUNCH_WINDOW   = (300, 600)
+EVENING_WINDOW = (600, 1000)
 
-# Passenger generation probability
-PEAK_REQUEST_RATE = 0.8
-NORMAL_REQUEST_RATE = 0.5
-
-# ----------------------------
-# Random Seed
-# ----------------------------
-
+PEAK_REQUEST_RATE = 0.8     # morning & evening
+NORMAL_REQUEST_RATE = 0.5   # lunch
 RANDOM_SEED = 42
