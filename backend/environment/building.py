@@ -1,17 +1,14 @@
 """
 building.py
-
 Defines the Building class that manages elevators,
 requests, and the simulation environment.
 """
-
 from collections import deque
 from typing import Deque, List, Optional
-
-from config import NUM_ELEVATORS
+from config import NUM_ELEVATORS, MORNING_WINDOW, LUNCH_WINDOW, EVENING_WINDOW
 from models.elevator import Elevator
 from models.request import Request
-from utils.enums import ElevatorStatus
+from utils.enums import ElevatorStatus, TrafficPeriod
 
 
 class Building:
@@ -20,26 +17,21 @@ class Building:
     """
 
     def __init__(self) -> None:
-
         # Create elevators
         self.elevators: List[Elevator] = [
             Elevator(elevator_id=i + 1)
             for i in range(NUM_ELEVATORS)
         ]
-
         # Waiting requests
         self.waiting_requests: Deque[Request] = deque()
-
         # Completed requests
         self.completed_requests: List[Request] = []
-
         # Simulation clock
         self.current_time: int = 0
 
     # -------------------------------------------------
     # Request Management
     # -------------------------------------------------
-
     def add_request(self, request: Request) -> None:
         """
         Add a new waiting request.
@@ -60,26 +52,28 @@ class Building:
         request.complete()
         self.completed_requests.append(request)
 
+    def next_waiting_request(self) -> Optional[Request]:
+        """
+        FIFO — the request the MDP will decide an action for next.
+        """
+        return self.waiting_requests[0] if self.waiting_requests else None
+
     # -------------------------------------------------
     # Elevator Management
     # -------------------------------------------------
-
     def get_elevator(self, elevator_id: int) -> Optional[Elevator]:
         """
         Returns an elevator by ID.
         """
-
         for elevator in self.elevators:
             if elevator.elevator_id == elevator_id:
                 return elevator
-
         return None
 
     def get_idle_elevators(self) -> List[Elevator]:
         """
         Returns all idle elevators.
         """
-
         return [
             elevator
             for elevator in self.elevators
@@ -90,7 +84,6 @@ class Building:
         """
         Returns elevators currently moving.
         """
-
         return [
             elevator
             for elevator in self.elevators
@@ -100,18 +93,31 @@ class Building:
     # -------------------------------------------------
     # Simulation Time
     # -------------------------------------------------
-
     def advance_time(self, steps: int = 1) -> None:
         """
         Advance simulation time.
         """
-
         self.current_time += steps
+
+    # -------------------------------------------------
+    # Traffic Period
+    # -------------------------------------------------
+    @property
+    def current_period(self) -> TrafficPeriod:
+        """
+        Maps current_time to the active traffic period
+        (Morning / Lunch / Evening).
+        """
+        t = self.current_time
+        if MORNING_WINDOW[0] <= t < MORNING_WINDOW[1]:
+            return TrafficPeriod.MORNING
+        elif LUNCH_WINDOW[0] <= t < LUNCH_WINDOW[1]:
+            return TrafficPeriod.LUNCH
+        return TrafficPeriod.EVENING
 
     # -------------------------------------------------
     # Statistics
     # -------------------------------------------------
-
     @property
     def total_requests(self) -> int:
         return (
@@ -133,7 +139,6 @@ class Building:
         return len(self.completed_requests)
 
     def __repr__(self) -> str:
-
         return (
             f"Building("
             f"time={self.current_time}, "
