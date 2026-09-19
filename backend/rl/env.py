@@ -37,7 +37,7 @@ class ElevatorEnv:
         )
         req = self.building.next_waiting_request()
         if req:
-            req_state = (req.passenger.source_floor, DIR_CODE[req.passenger.direction])
+            req_state = (req.passenger.source_floor, req.passenger.destination_floor)
         else:
             req_state = (0, 0)  # no pending request right now
         period_state = PERIOD_CODE[self.building.current_period]
