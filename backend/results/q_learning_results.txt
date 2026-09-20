@@ -1,0 +1,12 @@
+Q-LEARNING STAGE 4 RESULTS
+==========================
+
+Episodes: 200
+States learned: 18596
+
+Trained Agent Evaluation
+------------------------
+Passengers served: 34
+Passengers still waiting: 1
+Average waiting time: 22.8 steps
+Total reward: -774.0
