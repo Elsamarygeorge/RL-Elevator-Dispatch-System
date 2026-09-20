@@ -7,16 +7,18 @@ from utils.enums import Direction, TrafficPeriod
 DIR_CODE = {Direction.UP: 1, Direction.DOWN: -1, Direction.IDLE: 0}
 PERIOD_CODE = {TrafficPeriod.MORNING: 0, TrafficPeriod.LUNCH: 1, TrafficPeriod.EVENING: 2}
 
+
 class ElevatorEnv:
     """
     STATE:  for each elevator -> (floor, direction, load)
-            + pending request -> (source_floor, direction)
+            + pending request -> (source_floor, destination_floor)
             + current period
     ACTION: integer 0..NUM_ELEVATORS-1 — which elevator serves the
             current pending request
     REWARD: -1 * waiting_time of each request completed this step
-            -0.1 per elevator that moved this step (discourages
-            unnecessary travel / rewards energy efficiency)
+            -0.1 per elevator that moved with no pickup/drop-off
+            work assigned (penalizes truly unnecessary movement,
+            not movement in general)
     EPISODE: one full simulated day (SIMULATION_STEPS)
     """
 
@@ -61,9 +63,11 @@ class ElevatorEnv:
         for r in newly_completed:
             reward -= r.passenger.waiting_time or 0
 
-        # Small penalty for any elevator movement (discourage unnecessary travel)
+        # Small penalty for elevator movement with nothing to justify it
         for e in self.building.elevators:
-            if e.status.value == "MOVING":
+            is_moving = e.status.value == "MOVING"
+            has_work = bool(e.assigned_requests) or bool(e.onboard_requests)
+            if is_moving and not has_work:
                 reward -= 0.1
 
         done = self.building.current_time >= SIMULATION_STEPS
