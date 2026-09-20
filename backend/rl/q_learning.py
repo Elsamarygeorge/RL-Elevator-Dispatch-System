@@ -1,4 +1,6 @@
 import random
+import pickle
+from pathlib import Path
 from collections import defaultdict
 
 from config import NUM_ELEVATORS
@@ -8,9 +10,14 @@ class QLearningAgent:
     """
     Q-learning agent for elevator dispatch.
 
-    The agent works only with states, actions, and rewards.
+    The agent works only with:
+        state
+        action
+        reward
+        next_state
+
     It does not directly access Building, Elevator,
-    or Simulator.
+    Simulator, or other environment classes.
     """
 
     def __init__(
@@ -23,7 +30,7 @@ class QLearningAgent:
         epsilon_min=0.05,
     ):
         # Q-table:
-        # state -> Q-value for each possible action
+        # state -> list of Q-values for each possible action
         self.q_table = defaultdict(
             lambda: [0.0] * num_actions
         )
@@ -42,22 +49,24 @@ class QLearningAgent:
         # Exploration decay
         self.epsilon_decay = epsilon_decay
 
-        # Minimum exploration
+        # Minimum exploration probability
         self.epsilon_min = epsilon_min
 
-        # Separate random generator for the agent
+        # Separate random generator for the agent.
+        # This keeps agent exploration separate from
+        # TrafficGenerator's random sequence.
         self.rng = random.Random(42)
 
     def choose_action(self, state) -> int:
         """
         Choose an action using epsilon-greedy policy.
 
-        Explore:
-            choose a random elevator.
+        With probability epsilon:
+            explore by choosing a random elevator.
 
-        Exploit:
-            choose the elevator with the highest
-            Q-value for the current state.
+        Otherwise:
+            exploit by choosing the elevator with
+            the highest Q-value for the current state.
         """
 
         if self.rng.random() < self.epsilon:
@@ -103,7 +112,7 @@ class QLearningAgent:
     def decay_epsilon(self) -> None:
         """
         Reduce exploration after each episode,
-        while keeping it above epsilon_min.
+        while keeping epsilon above epsilon_min.
         """
 
         self.epsilon = max(
@@ -111,13 +120,75 @@ class QLearningAgent:
             self.epsilon * self.epsilon_decay
         )
 
+    def save_q_table(self, filepath=None) -> None:
+        """
+        Save the trained Q-table to a pickle file.
+
+        By default, the file is saved as:
+            backend/rl/q_table.pkl
+        """
+
+        if filepath is None:
+            filepath = (
+                Path(__file__).resolve().parent
+                / "q_table.pkl"
+            )
+
+        filepath = Path(filepath)
+
+        filepath.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        # Convert defaultdict to a normal dictionary
+        # because the lambda inside defaultdict cannot
+        # be directly pickled.
+        with open(filepath, "wb") as file:
+            pickle.dump(
+                dict(self.q_table),
+                file
+            )
+
+        print(f"Q-table saved to: {filepath}")
+
+    def load_q_table(self, filepath=None) -> None:
+        """
+        Load a previously trained Q-table.
+
+        By default, loads:
+            backend/rl/q_table.pkl
+        """
+
+        if filepath is None:
+            filepath = (
+                Path(__file__).resolve().parent
+                / "q_table.pkl"
+            )
+
+        filepath = Path(filepath)
+
+        if not filepath.exists():
+            raise FileNotFoundError(
+                f"Q-table file not found: {filepath}"
+            )
+
+        with open(filepath, "rb") as file:
+            data = pickle.load(file)
+
+        self.q_table.clear()
+        self.q_table.update(data)
+
+        print(f"Q-table loaded from: {filepath}")
+
 
 def train(env, agent, num_episodes=200):
     """
     Train the Q-learning agent.
 
     Returns:
-        history: total reward from each episode.
+        history:
+            Total reward obtained in each episode.
     """
 
     history = []
@@ -145,6 +216,7 @@ def train(env, agent, num_episodes=200):
             state = next_state
             total_reward += reward
 
+        # Reduce exploration after each episode.
         agent.decay_epsilon()
 
         history.append(total_reward)

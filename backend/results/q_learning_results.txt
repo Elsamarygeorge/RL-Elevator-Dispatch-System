@@ -2,7 +2,8 @@ Q-LEARNING STAGE 4 RESULTS
 ==========================
 
 Episodes: 200
-States learned: 18596
+States learned: 18512
+States loaded: 18596
 
 Trained Agent Evaluation
 ------------------------
