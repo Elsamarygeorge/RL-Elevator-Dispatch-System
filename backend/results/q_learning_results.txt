@@ -1,13 +1,19 @@
 Q-LEARNING STAGE 4 RESULTS
 ==========================
 
-Episodes: 200
-States learned: 18512
-States loaded: 18596
+Training episodes: 1000
+Learning rate (alpha): 0.1
+Discount factor (gamma): 0.95
+Initial epsilon: 1.0
+Epsilon decay: 0.99
+Minimum epsilon: 0.05
+Final epsilon: 0.050
+States learned: 87599
+States loaded: 88474
 
-Trained Agent Evaluation
+Trained Agent Evaluation (mean of 10 episodes)
 ------------------------
-Passengers served: 34
-Passengers still waiting: 1
-Average waiting time: 22.8 steps
-Total reward: -774.0
+Passengers served: 61.8
+Passengers still waiting: 1.0
+Average waiting time: 6.8 steps
+Total reward: -422.7
