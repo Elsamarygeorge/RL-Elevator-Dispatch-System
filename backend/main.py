@@ -2,9 +2,13 @@
 main.py
 Runs one full simulated day and prints a continuous,
 readable trace of the environment in action.
+
+Dispatch policy: NearestElevatorDispatcher (Stage 3 baseline).
+Swap the `dispatcher = ...` line below to compare a different strategy.
 """
 
 from rl.env import ElevatorEnv
+from algorithms.nearest import NearestElevatorDispatcher
 from config import NUM_ELEVATORS, SIMULATION_STEPS
 
 # How often to print a full snapshot (every step is too noisy for a demo)
@@ -20,7 +24,14 @@ def main():
 
     env = ElevatorEnv()
     state = env.reset()
+
+    # Dispatch strategy driving this run — swap this one line to compare
+    # a different strategy (FirstAvailableDispatcher, RoundRobinDispatcher(NUM_ELEVATORS),
+    # RandomDispatcher(NUM_ELEVATORS), or later the trained Q-learning agent).
+    dispatcher = NearestElevatorDispatcher()
+
     print(f"\nSimulation reset. {NUM_ELEVATORS} elevators, all starting at floor 1.")
+    print(f"Dispatch policy: {dispatcher.__class__.__name__}")
     print(f"Initial MDP state: {state}\n")
 
     total_reward = 0.0
@@ -28,10 +39,8 @@ def main():
     done = False
 
     while not done:
-        # Placeholder dispatch policy — always assigns to elevator 0.
-        # This will be replaced by the trained Q-learning agent in Stage 4.
         pending_req = env.building.next_waiting_request()
-        action = 0
+        action = dispatcher.choose_action(env.building)
 
         state, reward, done, _ = env.step(action)
         total_reward += reward
@@ -68,6 +77,7 @@ def main():
     print("\n" + "=" * 70)
     print("SIMULATION COMPLETE")
     print("=" * 70)
+    print(f"Dispatch policy            : {dispatcher.__class__.__name__}")
     print(f"Total simulated steps      : {SIMULATION_STEPS}")
     print(f"Passengers served          : {completed}")
     print(f"Passengers still waiting   : {env.building.pending_requests}")
