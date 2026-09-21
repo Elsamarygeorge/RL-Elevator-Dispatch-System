@@ -7,12 +7,32 @@ from utils.enums import Direction, TrafficPeriod
 DIR_CODE = {Direction.UP: 1, Direction.DOWN: -1, Direction.IDLE: 0}
 PERIOD_CODE = {TrafficPeriod.MORNING: 0, TrafficPeriod.LUNCH: 1, TrafficPeriod.EVENING: 2}
 
+# --- State abstraction settings (tune these to trade detail vs. learnability) ---
+ZONE_SIZE = 3             # floors per zone; 3 -> ~4 zones for 10 floors, 2 -> 5 zones (finer)
+LOAD_FULL_THRESHOLD = 6   # load at or above this counts as "full"; set to ~75% of elevator capacity
+
+
+def floor_to_zone(floor: int) -> int:
+    """Group floors into zones. Works whether floors start at 0 or 1."""
+    return floor // ZONE_SIZE
+
+
+def load_bucket(load: int) -> int:
+    """0 = empty, 1 = partial, 2 = (nearly) full."""
+    if load == 0:
+        return 0
+    if load < LOAD_FULL_THRESHOLD:
+        return 1
+    return 2
+
 
 class ElevatorEnv:
     """
-    STATE:  for each elevator -> (floor, direction, load)
-            + pending request -> (source_floor, destination_floor)
+    STATE:  for each elevator -> (floor zone, direction, load bucket)
+            + pending request -> (source floor zone, direction of travel)
             + current period
+            (abstracted on purpose: exact floors/loads gave ~87,000 states,
+            far too many for tabular Q-learning to cover)
     ACTION: integer 0..NUM_ELEVATORS-1 — which elevator serves the
             current pending request
     REWARD: -1 * waiting_time of each request completed this step
@@ -34,14 +54,17 @@ class ElevatorEnv:
 
     def _encode_state(self):
         elevator_state = tuple(
-            (e.current_floor, DIR_CODE[e.direction], e.current_load)
+            (floor_to_zone(e.current_floor), DIR_CODE[e.direction], load_bucket(e.current_load))
             for e in self.building.elevators
         )
         req = self.building.next_waiting_request()
         if req:
-            req_state = (req.passenger.source_floor, req.passenger.destination_floor)
+            src = req.passenger.source_floor
+            dst = req.passenger.destination_floor
+            travel_dir = 1 if dst > src else (-1 if dst < src else 0)
+            req_state = (floor_to_zone(src), travel_dir)
         else:
-            req_state = (0, 0)  # no pending request right now
+            req_state = (-1, 0)  # no pending request (-1 can't clash with a real zone)
         period_state = PERIOD_CODE[self.building.current_period]
         return elevator_state + req_state + (period_state,)
 
