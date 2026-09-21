@@ -3,20 +3,60 @@ main.py
 Runs one full simulated day and prints a continuous,
 readable trace of the environment in action.
 
-Dispatch policy: NearestElevatorDispatcher (Stage 3 baseline).
-Swap the `dispatcher = ...` line below to compare a different strategy.
+Dispatch policy: the trained Q-learning agent (Stage 4 result).
+Swap the `dispatcher = ...` line below to compare a different strategy
+(NearestElevatorDispatcher, FirstAvailableDispatcher,
+RoundRobinDispatcher(NUM_ELEVATORS), RandomDispatcher(NUM_ELEVATORS)).
 """
 
 from rl.env import ElevatorEnv
-from algorithms.nearest import NearestElevatorDispatcher
+from rl.q_learning import QLearningAgent
 from config import NUM_ELEVATORS, SIMULATION_STEPS
 
-# How often to print a full snapshot (every step is too noisy for a demo)
 PRINT_EVERY = 25
+
+
+class QLearningDispatcher:
+    """
+    Adapts the trained QLearningAgent (choose_action(state)) to the same
+    interface every other dispatcher uses (choose_action(building)), by
+    asking the bound ElevatorEnv for its own current encoded state.
+    """
+    def __init__(self, env, agent):
+        self.env = env
+        self.agent = agent
+        self.__class__.__name__ = "QLearningDispatcher"
+
+    def choose_action(self, building):
+        state = self.env._encode_state()
+        return self.agent.choose_action(state)
 
 
 def describe_elevator(idx, e):
     return f"E{idx}[floor={e.current_floor:2d}, load={e.current_load}/{e.capacity}]"
+
+
+def choose_action_safely(dispatcher, building):
+    """
+    Only asks the dispatcher for an action when there's an actual pending
+    request to decide on. Required for correctness with stateful
+    dispatchers like RoundRobinDispatcher — calling choose_action() on
+    every tick (even no-op ticks) would silently advance its internal
+    counter on wasted calls, desyncing its real assignment sequence.
+    """
+    if building.next_waiting_request() is None:
+        return 0
+    return dispatcher.choose_action(building)
+
+
+def total_waiting(building):
+    """Total passengers currently waiting anywhere in the building —
+    includes both unassigned requests and requests already assigned to
+    an elevator but not yet boarded."""
+    count = len(building.waiting_requests)
+    for e in building.elevators:
+        count += len(e.assigned_requests)
+    return count
 
 
 def main():
@@ -25,10 +65,10 @@ def main():
     env = ElevatorEnv()
     state = env.reset()
 
-    # Dispatch strategy driving this run — swap this one line to compare
-    # a different strategy (FirstAvailableDispatcher, RoundRobinDispatcher(NUM_ELEVATORS),
-    # RandomDispatcher(NUM_ELEVATORS), or later the trained Q-learning agent).
-    dispatcher = NearestElevatorDispatcher()
+    agent = QLearningAgent()
+    agent.load_q_table()
+    agent.epsilon = 0.0  # greedy — no exploration during a demo run
+    dispatcher = QLearningDispatcher(env, agent)
 
     print(f"\nSimulation reset. {NUM_ELEVATORS} elevators, all starting at floor 1.")
     print(f"Dispatch policy: {dispatcher.__class__.__name__}")
@@ -40,7 +80,7 @@ def main():
 
     while not done:
         pending_req = env.building.next_waiting_request()
-        action = dispatcher.choose_action(env.building)
+        action = choose_action_safely(dispatcher, env.building)
 
         state, reward, done, _ = env.step(action)
         total_reward += reward
@@ -79,8 +119,8 @@ def main():
     print("=" * 70)
     print(f"Dispatch policy            : {dispatcher.__class__.__name__}")
     print(f"Total simulated steps      : {SIMULATION_STEPS}")
+    print(f"Passengers still waiting   : {total_waiting(env.building)}")
     print(f"Passengers served          : {completed}")
-    print(f"Passengers still waiting   : {env.building.pending_requests}")
     print(f"Average waiting time       : {avg_wait:.1f} steps")
     print(f"Total reward (policy score): {total_reward:.1f}")
     print("=" * 70)

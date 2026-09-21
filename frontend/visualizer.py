@@ -7,16 +7,22 @@ Run from the project ROOT folder:
     python frontend/visualizer.py
 
 No extra installs needed — tkinter ships with Python's standard library.
+
+Requires backend/rl/env.py's reset() to accept an optional seed parameter
+(already true in Shreya's final version) and backend/rl/q_table.pkl to
+exist (the trained Q-table, saved by test_q_learning.py).
 """
 
 import sys
 import os
+import random
 import tkinter as tk
 from tkinter import ttk
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend")))
 
 from rl.env import ElevatorEnv
+from rl.q_learning import QLearningAgent
 from algorithms.nearest import NearestElevatorDispatcher
 from algorithms.first_available import FirstAvailableDispatcher
 from algorithms.round_robin import RoundRobinDispatcher
@@ -39,74 +45,89 @@ FONT_NORMAL = ("Consolas", 11)
 FONT_BOLD = ("Consolas", 11, "bold")
 FONT_HEADER = ("Consolas", 14, "bold")
 
-# Fixed, "nice" speed steps — Speed +/- move through this list rather than
-# multiplying continuously, so common values like 1x are always reachable.
+SIDEBAR_TITLE = "RL-BASED ELEVATOR DISPATCH SYSTEM"
+SECONDS_PER_STEP = 3
 SPEED_LEVELS = [0.5, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 50]
 
-# Every strategy the Compare page can run. Q-learning is left out here
-# deliberately until it's confirmed to beat the random baseline (see
-# project notes — the current agent isn't beating random yet due to a
-# too-large state space, which is being fixed separately). Once it does,
-# it can be added here via a small adapter, since the trained agent's
-# choose_action(state) takes an encoded state rather than a raw building.
-AVAILABLE_STRATEGIES = {
-    "Nearest Elevator": lambda: NearestElevatorDispatcher(),
-    "First Available": lambda: FirstAvailableDispatcher(),
-    "Round Robin": lambda: RoundRobinDispatcher(NUM_ELEVATORS),
-    "Random": lambda: RandomDispatcher(NUM_ELEVATORS),
-}
+# Q-Learning listed first and used as the default everywhere — it's the
+# project's actual headline result, not just another baseline to compare.
+STRATEGY_NAMES = [
+    "Q-Learning (Trained)",
+    "Nearest Elevator",
+    "First Available",
+    "Round Robin",
+    "Random",
+]
+
+# ---------------------------------------------------------------
+# Trained agent — loaded once, reused everywhere.
+# ---------------------------------------------------------------
+_trained_agent = None
+
+
+def get_trained_agent():
+    global _trained_agent
+    if _trained_agent is None:
+        _trained_agent = QLearningAgent()
+        _trained_agent.load_q_table()
+        _trained_agent.epsilon = 0.0  # greedy — no exploration during demo/comparison
+    return _trained_agent
+
+
+class QLearningDispatcher:
+    """
+    Adapts the trained QLearningAgent (which works on an ENCODED STATE via
+    choose_action(state)) to the same interface every other dispatcher in
+    this file uses: choose_action(building). It asks the ElevatorEnv it's
+    bound to for its own current encoded state, then hands that to the
+    trained agent.
+    """
+    def __init__(self, env, agent):
+        self.env = env
+        self.agent = agent
+        self.__class__.__name__ = "QLearningDispatcher"
+
+    def choose_action(self, building):
+        state = self.env._encode_state()
+        return self.agent.choose_action(state)
+
+
+def create_dispatcher(name, env):
+    """Builds the dispatcher for a given strategy name. Needs `env` because
+    the Q-Learning strategy has to read that specific environment's state."""
+    if name == "Q-Learning (Trained)":
+        return QLearningDispatcher(env, get_trained_agent())
+    if name == "Nearest Elevator":
+        return NearestElevatorDispatcher()
+    if name == "First Available":
+        return FirstAvailableDispatcher()
+    if name == "Round Robin":
+        return RoundRobinDispatcher(NUM_ELEVATORS)
+    if name == "Random":
+        return RandomDispatcher(NUM_ELEVATORS)
+    raise ValueError(f"Unknown strategy: {name}")
+
+
+def random_seed_value():
+    return random.randint(0, 2**31 - 1)
 
 
 def choose_action_safely(dispatcher, building):
     """
     Only asks the dispatcher for an action when there's an actual pending
-    request to decide on. This matters for stateful dispatchers like
-    RoundRobinDispatcher: calling choose_action() on every tick (even
-    no-op ticks with nothing to assign) would silently advance its
-    internal counter on wasted calls, desyncing its real assignment
-    sequence from a clean 0,1,2,0,1,2... rotation. Stateless dispatchers
-    (Nearest, FirstAvailable, Random) are unaffected either way, but this
-    guard is required for correctness with any dispatcher that carries
-    state across calls.
+    request to decide on. Required for correctness with stateful
+    dispatchers like RoundRobinDispatcher — calling choose_action() on
+    every tick (even no-op ticks) would silently advance its internal
+    counter on wasted calls, desyncing its assignment rotation.
     """
     if building.next_waiting_request() is None:
-        return 0  # ignored by ElevatorEnv.step() when there's no pending request
+        return 0
     return dispatcher.choose_action(building)
 
 
-def run_full_episode(dispatcher):
-    """Run one complete simulated day with a dispatcher, no animation.
-    Returns a dict of summary metrics — used by the Compare page."""
-    env = ElevatorEnv()
-    env.reset()
-    total_reward = 0.0
-    done = False
-    while not done:
-        action = choose_action_safely(dispatcher, env.building)
-        _, reward, done, _ = env.step(action)
-        total_reward += reward
-
-    completed = env.building.completed_count
-    total_wait = sum(r.passenger.waiting_time for r in env.building.completed_requests)
-    avg_wait = total_wait / completed if completed else 0
-    return {
-        "completed": completed,
-        "waiting": env.building.pending_requests,
-        "avg_wait": avg_wait,
-        "reward": total_reward,
-    }
-
-
 def waiting_by_floor(building):
-    """
-    Passengers physically standing at each floor right now — this includes
-    both requests still unassigned (building.waiting_requests) AND requests
-    already assigned to an elevator but not yet boarded (each elevator's
-    assigned_requests). Counting only the unassigned queue undercounts
-    reality: a passenger doesn't stop "waiting on the floor" the instant
-    they're assigned an elevator — only once that elevator actually arrives
-    and boards them.
-    """
+    """Passengers physically standing at each floor right now — both
+    unassigned requests and requests already assigned but not yet boarded."""
     counts = {}
     for req in building.waiting_requests:
         f = req.passenger.source_floor
@@ -118,20 +139,48 @@ def waiting_by_floor(building):
     return counts
 
 
+def total_waiting(building):
+    return sum(waiting_by_floor(building).values())
+
+
+def run_full_episode(strategy_name, seed):
+    """Run one complete simulated day with a strategy, no animation."""
+    env = ElevatorEnv()
+    env.reset(seed=seed)
+    dispatcher = create_dispatcher(strategy_name, env)
+    total_reward = 0.0
+    done = False
+    while not done:
+        action = choose_action_safely(dispatcher, env.building)
+        _, reward, done, _ = env.step(action)
+        total_reward += reward
+
+    completed = env.building.completed_count
+    total_wait_time = sum(r.passenger.waiting_time for r in env.building.completed_requests)
+    avg_wait = total_wait_time / completed if completed else 0
+    return {
+        "completed": completed,
+        "waiting": total_waiting(env.building),
+        "avg_wait": avg_wait,
+        "reward": total_reward,
+    }
+
+
 # =================================================================
 # Live View page
 # =================================================================
 class LivePage(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, app):
         super().__init__(parent, bg=BG_DARK)
+        self.app = app
 
         self.env = ElevatorEnv()
-        self.env.reset()
-        self.dispatcher = NearestElevatorDispatcher()
+        self.env.reset(seed=self.app.current_seed)
+        self.dispatcher = create_dispatcher("Q-Learning (Trained)", self.env)
         self.step_count = 0
         self.total_reward = 0.0
         self.running = False
-        self.speed_index = SPEED_LEVELS.index(2)  # start at 2x
+        self.speed_index = SPEED_LEVELS.index(2)
 
         self.displayed_floor = [float(e.current_floor) for e in self.env.building.elevators]
         self.target_floor = [float(e.current_floor) for e in self.env.building.elevators]
@@ -151,16 +200,17 @@ class LivePage(tk.Frame):
 
         controls = tk.Frame(self, bg=BG_DARK)
         controls.pack(side="top", fill="x", pady=4)
-        self.strategy_var = tk.StringVar(value="Nearest Elevator")
+        self.strategy_var = tk.StringVar(value="Q-Learning (Trained)")
         strategy_menu = ttk.Combobox(
             controls, textvariable=self.strategy_var,
-            values=list(AVAILABLE_STRATEGIES.keys()), state="readonly", width=18,
+            values=STRATEGY_NAMES, state="readonly", width=20,
         )
         strategy_menu.pack(side="left", padx=6)
         strategy_menu.bind("<<ComboboxSelected>>", lambda e: self._change_strategy())
 
         tk.Button(controls, text="Start/Pause", command=self._toggle_running).pack(side="left", padx=4)
-        tk.Button(controls, text="Reset", command=self._reset).pack(side="left", padx=4)
+        tk.Button(controls, text="Reset (same day)", command=self._reset).pack(side="left", padx=4)
+        tk.Button(controls, text="New Day", command=self._new_day).pack(side="left", padx=4)
         tk.Button(controls, text="Speed -", command=lambda: self._change_speed(-1)).pack(side="left", padx=4)
         tk.Button(controls, text="Speed +", command=lambda: self._change_speed(1)).pack(side="left", padx=4)
         self.speed_label = tk.Label(controls, text="", bg=BG_DARK, fg=FG_MUTED, font=FONT_NORMAL)
@@ -191,15 +241,19 @@ class LivePage(tk.Frame):
         self.running = not self.running
 
     def _reset(self):
-        self.env.reset()
+        self.env.reset(seed=self.app.current_seed)
         self.step_count = 0
         self.total_reward = 0.0
         self.running = False
         self.displayed_floor = [float(e.current_floor) for e in self.env.building.elevators]
         self.target_floor = [float(e.current_floor) for e in self.env.building.elevators]
 
+    def _new_day(self):
+        self.app.current_seed = random_seed_value()
+        self._reset()
+
     def _change_strategy(self):
-        self.dispatcher = AVAILABLE_STRATEGIES[self.strategy_var.get()]()
+        self.dispatcher = create_dispatcher(self.strategy_var.get(), self.env)
         self._reset()
 
     def _change_speed(self, direction):
@@ -316,13 +370,13 @@ class LivePage(tk.Frame):
 
         period = self.env.building.current_period.value
         completed = self.env.building.completed_count
-        total_wait = sum(r.passenger.waiting_time for r in self.env.building.completed_requests)
-        avg_wait = total_wait / completed if completed else 0
+        total_wait_time = sum(r.passenger.waiting_time for r in self.env.building.completed_requests)
+        avg_wait = total_wait_time / completed if completed else 0
         self.info_var.set(
             f"Step {self.step_count}/{SIMULATION_STEPS}   Period: {period}   "
-            f"Completed: {completed}   Unassigned: {self.env.building.pending_requests}   "
-            f"Avg Wait: {avg_wait:.1f}   Reward: {self.total_reward:.1f}   "
-            f"Policy: {self.dispatcher.__class__.__name__}"
+            f"Completed: {completed}   Waiting: {total_waiting(self.env.building)}   "
+            f"Avg Wait: {avg_wait:.1f} steps   Reward: {self.total_reward:.1f}   "
+            f"Policy: {self.strategy_var.get()}"
         )
 
 
@@ -330,22 +384,24 @@ class LivePage(tk.Frame):
 # Compare Strategies page
 # =================================================================
 class ComparePage(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, app):
         super().__init__(parent, bg=BG_DARK)
+        self.app = app
         self.results = {}
 
         tk.Label(self, text="Compare Strategies", bg=BG_DARK, fg=FG_TEXT, font=FONT_HEADER).pack(
             anchor="w", padx=16, pady=(16, 4)
         )
         tk.Label(
-            self, text="Select strategies, then run — each runs one full simulated day silently.",
+            self,
+            text="Runs each selected strategy silently on today's simulated traffic (same day as Live View).",
             bg=BG_DARK, fg=FG_MUTED, font=FONT_NORMAL,
         ).pack(anchor="w", padx=16)
 
         check_frame = tk.Frame(self, bg=BG_DARK)
         check_frame.pack(anchor="w", padx=16, pady=10)
         self.check_vars = {}
-        for name in AVAILABLE_STRATEGIES:
+        for name in STRATEGY_NAMES:
             var = tk.BooleanVar(value=True)
             tk.Checkbutton(
                 check_frame, text=name, variable=var, bg=BG_DARK, fg=FG_TEXT,
@@ -355,23 +411,31 @@ class ComparePage(tk.Frame):
             self.check_vars[name] = var
 
         tk.Button(self, text="Run Comparison", command=self._run_comparison, font=FONT_BOLD).pack(
-            anchor="w", padx=16, pady=(0, 12)
+            anchor="w", padx=16, pady=(0, 8)
         )
 
-        self.status_label = tk.Label(self, text="", bg=BG_DARK, fg=FG_MUTED, font=FONT_NORMAL)
+        self.status_label = tk.Label(
+            self, text="Ready — click Run Comparison to compare strategies on today's simulated traffic.",
+            bg=BG_DARK, fg=FG_MUTED, font=FONT_NORMAL,
+        )
         self.status_label.pack(anchor="w", padx=16)
+
+        tk.Label(
+            self, text=f"Note: 1 simulation step \u2248 {SECONDS_PER_STEP} seconds of real time (assumption, for reference only).",
+            bg=BG_DARK, fg=FG_MUTED, font=("Consolas", 9, "italic"),
+        ).pack(anchor="w", padx=16, pady=(2, 8))
 
         columns = ("strategy", "completed", "waiting", "avg_wait", "reward")
         self.table = ttk.Treeview(self, columns=columns, show="headings", height=6)
-        for col, label in zip(columns, ["Strategy", "Served", "Unassigned", "Avg Wait", "Total Reward"]):
+        for col, label in zip(columns, ["Strategy", "Served", "Waiting", "Avg Wait (steps)", "Total Reward"]):
             self.table.heading(col, text=label)
-            self.table.column(col, width=140, anchor="center")
+            self.table.column(col, width=150, anchor="center")
         self.table.pack(fill="x", padx=16, pady=10)
 
         tk.Label(self, text="Average Waiting Time Comparison", bg=BG_DARK, fg=FG_TEXT, font=FONT_BOLD).pack(
             anchor="w", padx=16
         )
-        self.chart = tk.Canvas(self, bg=BG_PANEL, height=260, highlightthickness=0)
+        self.chart = tk.Canvas(self, bg=BG_PANEL, height=300, highlightthickness=0)
         self.chart.pack(fill="both", expand=True, padx=16, pady=(4, 16))
 
     def _run_comparison(self):
@@ -383,12 +447,15 @@ class ComparePage(tk.Frame):
         self.status_label.config(text="Running...")
         self.update_idletasks()
 
+        seed = self.app.current_seed
+
         self.results = {}
         for name in selected:
-            dispatcher = AVAILABLE_STRATEGIES[name]()
-            self.results[name] = run_full_episode(dispatcher)
+            self.results[name] = run_full_episode(name, seed=seed)
 
-        self.status_label.config(text=f"Done — ran {len(selected)} strategies over {SIMULATION_STEPS} steps each.")
+        self.status_label.config(
+            text=f"Done — ran {len(selected)} strategies over {SIMULATION_STEPS} steps of today's simulated traffic."
+        )
         self._update_table()
         self._draw_chart()
 
@@ -404,19 +471,36 @@ class ComparePage(tk.Frame):
         canvas = self.chart
         canvas.delete("all")
         width = canvas.winfo_width() or 700
-        height = canvas.winfo_height() or 260
+        height = canvas.winfo_height() or 300
         if not self.results:
             return
 
+        left_margin = 70
+        bottom_margin = 60
+        top_margin = 20
+        plot_h = height - top_margin - bottom_margin
+        plot_w = width - left_margin - 20
+
         max_wait = max(r["avg_wait"] for r in self.results.values()) or 1
         n = len(self.results)
-        bar_w = min(100, (width - 40) / max(n, 1) - 20)
-        margin_bottom = 40
-        x = 30
+        bar_w = min(100, plot_w / max(n, 1) - 20)
 
+        canvas.create_line(left_margin, top_margin, left_margin, height - bottom_margin, fill=FG_MUTED)
+        canvas.create_text(
+            22, top_margin + plot_h / 2, text="Average Wait (steps)",
+            fill=FG_MUTED, font=("Consolas", 10), angle=90, anchor="center"
+        )
+
+        canvas.create_line(left_margin, height - bottom_margin, width - 10, height - bottom_margin, fill=FG_MUTED)
+        canvas.create_text(
+            (left_margin + width) / 2, height - 14, text="Dispatch Strategy",
+            fill=FG_MUTED, font=("Consolas", 10)
+        )
+
+        x = left_margin + 20
         for name, r in self.results.items():
-            bar_h = (r["avg_wait"] / max_wait) * (height - margin_bottom - 30)
-            y0 = height - margin_bottom
+            bar_h = (r["avg_wait"] / max_wait) * plot_h
+            y0 = height - bottom_margin
             y1 = y0 - bar_h
             canvas.create_rectangle(x, y1, x + bar_w, y0, fill=COLOR_MOVING, outline="")
             canvas.create_text(x + bar_w / 2, y1 - 10, text=f"{r['avg_wait']:.1f}", fill=FG_TEXT, font=FONT_NORMAL)
@@ -434,7 +518,9 @@ class App(tk.Tk):
         self.geometry("1150x720")
         self.configure(bg=BG_DARK)
 
-        sidebar = tk.Frame(self, bg=BG_PANEL, width=160)
+        self.current_seed = random_seed_value()
+
+        sidebar = tk.Frame(self, bg=BG_PANEL, width=180)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
@@ -442,12 +528,21 @@ class App(tk.Tk):
         tk.Button(sidebar, text="Live View", command=lambda: self._show("live"), width=16).pack(pady=6)
         tk.Button(sidebar, text="Compare Strategies", command=lambda: self._show("compare"), width=16).pack(pady=6)
 
+        tk.Frame(sidebar, bg="#33363f", height=1).pack(fill="x", padx=16, pady=16)
+
+        title_frame = tk.Frame(sidebar, bg=BG_PANEL)
+        title_frame.pack(fill="both", expand=True)
+        tk.Label(
+            title_frame, text=SIDEBAR_TITLE, bg=BG_PANEL, fg=FG_TEXT,
+            font=("Consolas", 15, "bold"), justify="center", wraplength=150,
+        ).place(relx=0.5, rely=0.5, anchor="center")
+
         container = tk.Frame(self, bg=BG_DARK)
         container.pack(side="right", fill="both", expand=True)
 
         self.pages = {
-            "live": LivePage(container),
-            "compare": ComparePage(container),
+            "live": LivePage(container, self),
+            "compare": ComparePage(container, self),
         }
         for page in self.pages.values():
             page.place(relx=0, rely=0, relwidth=1, relheight=1)
