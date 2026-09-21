@@ -2,6 +2,8 @@ import random
 
 from rl.env import ElevatorEnv
 from rl.q_learning import QLearningAgent
+from algorithms.nearest import NearestElevatorDispatcher
+from algorithms.least_loaded import LeastLoadedDispatcher
 from config import NUM_ELEVATORS
 
 EPISODES = 10
@@ -42,7 +44,7 @@ steps = 0
 def greedy(state):
     global hits, steps
     steps += 1
-    if state in agent.q_table:      # check BEFORE choose_action creates the entry
+    if state in agent.q_table:
         hits += 1
     return agent.choose_action(state)
 
@@ -58,7 +60,26 @@ random_results = [
     for _ in range(EPISODES)
 ]
 
+# --- nearest elevator baseline ---
+nearest = NearestElevatorDispatcher()
+env = ElevatorEnv()
+nearest_results = [
+    run_episode(env, lambda s: nearest.choose_action(env.building))
+    for _ in range(EPISODES)
+]
+
+# --- least-loaded baseline ---
+least = LeastLoadedDispatcher()
+env = ElevatorEnv()
+least_results = [
+    run_episode(env, lambda s: least.choose_action(env.building))
+    for _ in range(EPISODES)
+]
+
 print()
 summarize("Trained agent", agent_results)
 summarize("Random policy", random_results)
+summarize("Nearest", nearest_results)
+summarize("Least loaded", least_results)
 print(f"\nState hit rate during evaluation: {hits}/{steps} = {hits/steps:.1%}")
+print(f"States in Q-table: {len(agent.q_table)}")

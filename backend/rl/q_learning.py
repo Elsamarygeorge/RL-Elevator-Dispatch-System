@@ -93,7 +93,8 @@ class QLearningAgent:
 
 def train(env, agent, num_episodes=1000):
     """
-    Train the Q-learning agent.
+    Train the Q-learning agent on the environment's single default day.
+
     Returns the total reward obtained in each episode.
     """
     history = []

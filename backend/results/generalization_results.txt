@@ -1,0 +1,9 @@
+﻿Q-table loaded from: C:\Users\user\OneDrive\Desktop\RL-Elevator-Dispatch-System\backend\rl\q_table.pkl
+
+Avg wait on 10 unseen traffic days (seeds 2000 to 2009)
+Trained agent  mean=8.0  min=7.2  max=8.4
+Random         mean=9.3  min=8.7  max=9.8
+Nearest        mean=32.2  min=18.4  max=93.4
+Least loaded   mean=8.0  min=7.8  max=8.4
+
+Agent beat Least loaded on 5/10 days

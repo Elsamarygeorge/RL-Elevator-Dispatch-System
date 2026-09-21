@@ -2,18 +2,20 @@ Q-LEARNING STAGE 4 RESULTS
 ==========================
 
 Training episodes: 1000
+Training traffic: single fixed day (default seed)
+Evaluation traffic seeds: 1000 to 1009
 Learning rate (alpha): 0.1
 Discount factor (gamma): 0.95
 Initial epsilon: 1.0
 Epsilon decay: 0.99
 Minimum epsilon: 0.05
 Final epsilon: 0.050
-States learned: 87599
-States loaded: 88474
+States learned: 1717
+States loaded: 1719
 
-Trained Agent Evaluation (mean of 10 episodes)
+Trained Agent Evaluation (mean of 10 held-out days)
 ------------------------
-Passengers served: 61.8
-Passengers still waiting: 1.0
-Average waiting time: 6.8 steps
-Total reward: -422.7
+Passengers served: 683.0
+Passengers still waiting: 0.8
+Average waiting time: 8.6 steps
+Total reward: -4473.2

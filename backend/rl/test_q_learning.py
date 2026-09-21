@@ -16,10 +16,11 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 # =====================================================
 NUM_EPISODES = 1000
 MOVING_AVERAGE_WINDOW = 10
-EVAL_EPISODES = 10          # average the evaluation over several runs
+EVAL_SEEDS = list(range(1000, 1010))  # held-out days used for evaluation
+EVAL_EPISODES = len(EVAL_SEEDS)
 
 # =====================================================
-# Train
+# Train (single fixed day)
 # =====================================================
 env = ElevatorEnv()
 agent = QLearningAgent(epsilon_decay=0.99)
@@ -40,14 +41,14 @@ loaded_agent.load_q_table()
 print("States loaded:", len(loaded_agent.q_table))
 
 # =====================================================
-# Evaluate the trained agent (no exploration)
+# Evaluate the trained agent on held-out days (no exploration)
 # =====================================================
 loaded_agent.epsilon = 0.0
 
 served_list, waiting_list, avg_wait_list, reward_list = [], [], [], []
 
-for _ in range(EVAL_EPISODES):
-    state = env.reset()
+for eval_seed in EVAL_SEEDS:
+    state = env.reset(seed=eval_seed)
     done = False
     total_reward = 0.0
 
@@ -78,7 +79,7 @@ still_waiting = mean(waiting_list)
 avg_wait = mean(avg_wait_list)
 total_reward = mean(reward_list)
 
-print(f"\nTrained Agent Evaluation (mean of {EVAL_EPISODES} episodes)")
+print(f"\nTrained Agent Evaluation (mean of {EVAL_EPISODES} held-out days)")
 print("------------------------")
 print("Passengers served:", f"{completed:.1f}")
 print("Passengers still waiting:", f"{still_waiting:.1f}")
@@ -94,6 +95,8 @@ with open(results_file, "w", encoding="utf-8") as file:
     file.write("Q-LEARNING STAGE 4 RESULTS\n")
     file.write("==========================\n\n")
     file.write(f"Training episodes: {len(history)}\n")
+    file.write("Training traffic: single fixed day (default seed)\n")
+    file.write(f"Evaluation traffic seeds: {EVAL_SEEDS[0]} to {EVAL_SEEDS[-1]}\n")
     file.write(f"Learning rate (alpha): {agent.alpha}\n")
     file.write(f"Discount factor (gamma): {agent.gamma}\n")
     file.write("Initial epsilon: 1.0\n")
@@ -102,7 +105,7 @@ with open(results_file, "w", encoding="utf-8") as file:
     file.write(f"Final epsilon: {agent.epsilon:.3f}\n")
     file.write(f"States learned: {len(agent.q_table)}\n")
     file.write(f"States loaded: {len(loaded_agent.q_table)}\n\n")
-    file.write(f"Trained Agent Evaluation (mean of {EVAL_EPISODES} episodes)\n")
+    file.write(f"Trained Agent Evaluation (mean of {EVAL_EPISODES} held-out days)\n")
     file.write("------------------------\n")
     file.write(f"Passengers served: {completed:.1f}\n")
     file.write(f"Passengers still waiting: {still_waiting:.1f}\n")
