@@ -394,7 +394,7 @@ class ComparePage(tk.Frame):
         )
         tk.Label(
             self,
-            text="Runs each selected strategy silently on today's simulated traffic (same day as Live View).",
+            text="Runs each selected strategy silently on today's simulated traffic.",
             bg=BG_DARK, fg=FG_MUTED, font=FONT_NORMAL,
         ).pack(anchor="w", padx=16)
 
@@ -421,7 +421,7 @@ class ComparePage(tk.Frame):
         self.status_label.pack(anchor="w", padx=16)
 
         tk.Label(
-            self, text=f"Note: 1 simulation step \u2248 {SECONDS_PER_STEP} seconds of real time (assumption, for reference only).",
+            self, text=f"Note: 1 simulation step \u2248 {SECONDS_PER_STEP} seconds of real time.",
             bg=BG_DARK, fg=FG_MUTED, font=("Consolas", 9, "italic"),
         ).pack(anchor="w", padx=16, pady=(2, 8))
 
