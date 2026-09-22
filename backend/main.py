@@ -1,12 +1,11 @@
 """
 main.py
 Runs one full simulated day and prints a continuous,
-readable trace of the environment in action.
+readable trace of the environment in action — including
+the reward for every step, so it's visible proof of the
+MDP loop (State -> Action -> Reward), not just a final total.
 
 Dispatch policy: the trained Q-learning agent (Stage 4 result).
-Swap the `dispatcher = ...` line below to compare a different strategy
-(NearestElevatorDispatcher, FirstAvailableDispatcher,
-RoundRobinDispatcher(NUM_ELEVATORS), RandomDispatcher(NUM_ELEVATORS)).
 """
 
 from rl.env import ElevatorEnv
@@ -60,10 +59,11 @@ def total_waiting(building):
 
 
 def main():
-    print("=" * 70)
+    print("=" * 90)
 
     env = ElevatorEnv()
-    state = env.reset()
+    import random
+    state = env.reset(seed=random.randint(0, 2**31 - 1))
 
     agent = QLearningAgent()
     agent.load_q_table()
@@ -94,17 +94,17 @@ def main():
 
             if pending_req is not None:
                 req_desc = (
-                    f"Passenger request: floor {pending_req.passenger.source_floor} "
-                    f"-> floor {pending_req.passenger.destination_floor}"
+                    f"Passenger request: floor {pending_req.passenger.source_floor}"
+                    f"->{pending_req.passenger.destination_floor}"
                 )
-                assign_label = f"Assigned -> E{action}"
+                assign_label = f"Assigned-> E{action}"
             else:
                 req_desc = "No new request this step"
                 assign_label = "No assignment"
 
             print(
-                f"[t={step:4d} | {period:>7s}] {req_desc:40s} | "
-                f"{assign_label:16s} | {elevators_desc}"
+                f"[t={step:4d} | {period:>7s}] {req_desc:30s} | "
+                f"{assign_label:14s} | Reward:{reward:6.2f} | {elevators_desc}"
             )
 
     # ---------------- Summary ----------------
@@ -114,16 +114,16 @@ def main():
     )
     avg_wait = total_wait / completed if completed > 0 else 0
 
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 90)
     print("SIMULATION COMPLETE")
-    print("=" * 70)
+    print("=" * 90)
     print(f"Dispatch policy            : {dispatcher.__class__.__name__}")
     print(f"Total simulated steps      : {SIMULATION_STEPS}")
     print(f"Passengers still waiting   : {total_waiting(env.building)}")
     print(f"Passengers served          : {completed}")
     print(f"Average waiting time       : {avg_wait:.1f} steps")
     print(f"Total reward (policy score): {total_reward:.1f}")
-    print("=" * 70)
+    print("=" * 90)
 
 
 if __name__ == "__main__":
